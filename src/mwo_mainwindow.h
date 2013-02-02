@@ -4,8 +4,11 @@
 #include <QtGui/QtGui>
 #include "onyx/ui/ui.h"
 #include "onyx/ui/status_bar.h"
-#include "onyx/ui/ui_utils.h"
-#include "onyx/screen/screen_proxy.h"
+//#include "onyx/screen/screen_proxy.h"
+//#include "onyx/ui/ui_utils.h"
+
+#include "game_widget.h"
+//#include "game_actions.h"
 
 using namespace ui;
 
@@ -20,22 +23,24 @@ public:
 public:
     bool start();
     bool stop();
-    bool exec(const QStringList & args);
 
 protected:
-    virtual void mousePressEvent(QMouseEvent*);
     virtual void keyPressEvent(QKeyEvent *e);
     virtual void keyReleaseEvent(QKeyEvent *ke);
-    virtual void closeEvent(QCloseEvent * event);
-    virtual bool eventFilter(QObject *obj, QEvent *event);
-    virtual void paintEvent(QPaintEvent *);
+    //virtual void mousePressEvent(QMouseEvent*);
+    //virtual void closeEvent(QCloseEvent * event);
+    //virtual bool eventFilter(QObject *obj, QEvent *event);
+    //virtual void paintEvent(QPaintEvent *);
 
 private Q_SLOTS:
-    void OnTimer();
-
+    void showMenu();
+    //void OnTimer();
 private:
-    QTimer      timer_;
-    StatusBar*  status_bar_;
+    GameWidget* game_widget_;
+    //GameActions game_actions_;
+    SystemActions system_actions_;
+    //StatusBar   status_bar_;
+    //QTimer      timer_;
 };
 
 

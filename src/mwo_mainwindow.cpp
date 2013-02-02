@@ -1,43 +1,44 @@
-#include <sys/time.h>
 #include <QtGui/QtGui>
+
 #include "onyx/screen/screen_update_watcher.h"
-#include "onyx/sys/sys_status.h"
-#include "onyx/sys/platform.h"
-#include "onyx/data/configuration.h"
+#include "onyx/ui/screen_rotation_dialog.h"
+#include "onyx/sys/sys.h"
+
+
+#include <sys/time.h>
 #include "mwo_mainwindow.h"
 #include "mwo_logger.h"
+#include "game_widget.h"
 
 MwoMainwindow::MwoMainwindow(QWidget *parent)
     : QWidget(0, Qt::FramelessWindowHint)
 {
     logger.log("ENTER MwoMainwindow:MwoMainwindow().");
 
-    //setWindowTitle(QCoreApplication::tr("Five In Row"));
+    setWindowTitle(QCoreApplication::tr("Five In Row"));
+    setAutoFillBackground(true);
+    setBackgroundRole(QPalette::Base);
 
-    ////setAutoFillBackground(true);
-    ////setBackgroundRole(QPalette::Base);
-    ////gomoku = new GomokuWidget(this);
+    game_widget_ = new GameWidget(this);
 
-    //// set up status bar
-    //status_bar_ = new StatusBar(this, MENU |CONNECTION | BATTERY | MESSAGE | CLOCK | SCREEN_REFRESH);
+    // FIXME: set up status bar, status_bar_ will cause crash.
+    //status_bar_ = new StatusBar(this);
     //status_bar_->setFocusPolicy(Qt::NoFocus);
-    ////connect(status_bar_, SIGNAL(menuClicked()), this, SLOT(showMenu()));
+    //connect(status_bar_, SIGNAL(menuClicked()), this, SLOT(showMenu()));
 
-    //// set up vertical layout
-    //QVBoxLayout *layout = new QVBoxLayout;
-    //layout->setMargin(0);
+    // set up vertical layout
+    QVBoxLayout *layout = new QVBoxLayout;
+    layout->setMargin(0);
     //layout->addWidget(status_bar_);
-    //setLayout(layout);
+    setLayout(layout);
 
     //// set up popup menu to long press screen
-    ////SysStatus & sys_status = SysStatus::instance();
-    ////connect( &sys_status, SIGNAL( mouseLongPress(QPoint, QSize) ), gomoku, SLOT( onMouseLongPress(QPoint, QSize) ) );
-    ////connect( gomoku, SIGNAL( popupMenu() ), this, SLOT( showMenu() ) );
+    SysStatus & sys_status = SysStatus::instance();
+    connect( &sys_status, SIGNAL( mouseLongPress(QPoint, QSize) ), game_widget_, SLOT( onMouseLongPress(QPoint, QSize) ) );
+    connect( game_widget_, SIGNAL( popupMenu() ), this, SLOT( showMenu() ) );
     
     // set up screen watcher and refresh
     onyx::screen::watcher().addWatcher(this);
-    update();
-    onyx::screen::watcher().enqueue(this, onyx::screen::ScreenProxy::GC);
 
     logger.log("LEAVE MwoMainwindow:MwoMainwindow().");
 }
@@ -48,19 +49,10 @@ MwoMainwindow::~MwoMainwindow()
     logger.log("LEAVE MwoMainwindow:~MwoMainwindow().");
 }
 
-void MwoMainwindow::keyPressEvent(QKeyEvent *e)
+void MwoMainwindow::keyPressEvent(QKeyEvent *ke)
 {
     logger.log("ENTER MwoMainwindow:keyPressEvent().");
-    switch (e->key())
-    {
-    case Qt::Key_Down:
-    case Qt::Key_Up:
-        break;
-    default:
-        QWidget::keyPressEvent(e);
-        break;
-    }
-    e->accept();
+    ke->accept();
     logger.log("LEAVE MwoMainwindow:keyPressEvent().");
 }
 
@@ -70,6 +62,8 @@ void MwoMainwindow::keyReleaseEvent(QKeyEvent *ke)
     switch (ke->key())
     {
     case ui::Device_Menu_Key:
+        ke->accept();
+        showMenu();
         logger.log(QString("INFO  Device_Menu_Key pressed."));
         break;
     case Qt::Key_Left:
@@ -94,54 +88,145 @@ void MwoMainwindow::keyReleaseEvent(QKeyEvent *ke)
         break;
     case Qt::Key_Escape:
     case Qt::Key_Home:
-        logger.log(QString("INFO  Key_Home pressed."));
+        ke->accept();
         stop();
+        logger.log(QString("INFO  Key_Home pressed."));
     default:
+        qApp->sendEvent(game_widget_, ke);
         logger.log(QString("INFO  unknown key pressed."));
-        QWidget::keyReleaseEvent(ke);
         break;
     }
-    ke->ignore();
+
     logger.log("LEAVE MwoMainwindow:keyReleaseEvent().");
 }
 
-void MwoMainwindow::closeEvent(QCloseEvent * event)
+void MwoMainwindow::showMenu()
 {
-    logger.log("ENTER MwoMainwindow:closeEvent().");
-    QWidget::closeEvent(event);
-    logger.log("LEAVE MwoMainwindow:closeEvent().");
-}
-
-void MwoMainwindow::mousePressEvent(QMouseEvent*me)
-{
-    logger.log("ENTER MwoMainwindow:mousePressEvent().");
-    //me->accept();
-    logger.log("LEAVE MwoMainwindow:mousePressEvent().");
-}
-
-bool MwoMainwindow::eventFilter(QObject *obj, QEvent *e)
-{
-    logger.log("ENTER MwoMainwindow:eventFilter().");
-
-    qDebug("Select event:%d", e->type());
-    if (e->type() == QEvent::MouseButtonRelease && obj->isWidgetType())
+    PopupMenu menu(this);
+    //gomoku_actions_.generateActions();
+    //menu.addGroup(&gomoku_actions_);
+    std::vector<int> all;
+    all.push_back(ROTATE_SCREEN);
+    all.push_back(MUSIC);
+    all.push_back(RETURN_TO_LIBRARY);
+    system_actions_.generateActions(all);
+    menu.setSystemAction(&system_actions_);
+    if(menu.popup() != QDialog::Accepted)
     {
-        onyx::screen::instance().updateWidget(0, onyx::screen::ScreenProxy::GU);
+        QApplication::processEvents();
+        repaint();
+        onyx::screen::instance().flush(0, onyx::screen::ScreenProxy::GC);
+        return;
     }
 
-    logger.log("LEAVE MwoMainwindow:eventFilter().");
-    return QObject::eventFilter(obj, e);
+    QAction * group = menu.selectedCategory();
+
+    if(group == system_actions_.category())
+    {
+        SystemAction system_action = system_actions_.selected();
+        switch(system_action)
+        {
+            case RETURN_TO_LIBRARY:
+                {
+                    qApp->quit();
+                }
+                break;
+            case ROTATE_SCREEN:
+                {
+                    ScreenRotationDialog dialog(this);
+                    dialog.popup();
+                    repaint();
+                    onyx::screen::watcher().enqueue(this, onyx::screen::ScreenProxy::GU, onyx::screen::ScreenCommand::WAIT_ALL);
+                }
+                break;
+            case SCREEN_UPDATE_TYPE:
+                {
+#ifndef BUILD_FOR_FB
+                    onyx::screen::instance().updateWidget(0, onyx::screen::ScreenProxy::GU);
+                    onyx::screen::instance().toggleWaveform();
+#endif
+                }
+                break;
+            case MUSIC:
+                {
+                    // Start or show music player.
+#ifndef BUILD_FOR_FB
+                    onyx::screen::instance().flush(0, onyx::screen::ScreenProxy::GU);
+#endif
+                    sys::SysStatus::instance().requestMusicPlayer(sys::START_PLAYER);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    //else if(group == gomoku_actions_.category())
+    //{
+    //    GomokuActionsType index = gomoku_actions_.selected();
+    //    switch(index)
+    //    {
+    //    case NEW:
+    //        gomoku->newGame();
+    //        update();
+    //        break;
+    //    case ABOUT:
+    //        about();
+    //        repaint();
+    //        onyx::screen::watcher().enqueue(this, onyx::screen::ScreenProxy::GU, onyx::screen::ScreenCommand::WAIT_ALL);
+    //        break;
+    //    default:
+    //        break;
+    //    }
+    //}
+    repaint();
+    onyx::screen::instance().flush(0, onyx::screen::ScreenProxy::GC, onyx::screen::ScreenCommand::WAIT_ALL);
 }
 
-void MwoMainwindow::paintEvent(QPaintEvent *e)
-{
-    logger.log("ENTER MwoMainwindow:paintEvent().");
-    logger.log("LEAVE MwoMainwindow:paintEvent().");
-}
+
+
+//void MwoMainwindow::mousePressEvent(QMouseEvent*me)
+//{
+//    logger.log("ENTER MwoMainwindow:mousePressEvent().");
+//    //me->accept();
+//    logger.log("LEAVE MwoMainwindow:mousePressEvent().");
+//}
+//
+//bool MwoMainwindow::eventFilter(QObject *obj, QEvent *e)
+//{
+//    logger.log("ENTER MwoMainwindow:eventFilter().");
+//
+//    qDebug("Select event:%d", e->type());
+//    if (e->type() == QEvent::MouseButtonRelease && obj->isWidgetType())
+//    {
+//        onyx::screen::instance().updateWidget(0, onyx::screen::ScreenProxy::GU);
+//    }
+//
+//    logger.log("LEAVE MwoMainwindow:eventFilter().");
+//    return QObject::eventFilter(obj, e);
+//}
+//
+//void MwoMainwindow::paintEvent(QPaintEvent *e)
+//{
+//    logger.log("ENTER MwoMainwindow:paintEvent().");
+//
+//    QPainter painter(this);
+//    QFont font = QApplication::font();
+//    font.setPointSize(24);
+//    painter.setFont(font);
+//    QFontMetrics fm(font);
+//    painter.drawText(QRect(0,0, width(), 200), Qt::AlignLeft, "Five in A Row by Moose W. Oler");
+//    onyx::screen::instance().updateWidget(0, onyx::screen::ScreenProxy::A2, true, onyx::screen::ScreenCommand::WAIT_ALL);
+//
+//    logger.log("LEAVE MwoMainwindow:paintEvent().");
+//}
 
 bool MwoMainwindow::start()
 {
     logger.log("ENTER MwoMainwindow:start().");
+
+    showMaximized();
+    onyx::screen::instance().flush(0, onyx::screen::ScreenProxy::GC);
+
     logger.log("LEAVE MwoMainwindow:start().");
     return true;
 }
@@ -154,15 +239,9 @@ bool MwoMainwindow::stop()
     return true;
 }
 
-bool MwoMainwindow::exec(const QStringList & args)
-{
-    logger.log("ENTER MwoMainwindow:exec().");
-    logger.log("LEAVE MwoMainwindow:exec().");
-    return true;
-}
 
-void MwoMainwindow::OnTimer()
-{
-    logger.log("ENTER MwoMainwindow:OnTimer().");
-    logger.log("LEAVE MwoMainwindow:OnTimer().");
-}
+//void MwoMainwindow::OnTimer()
+//{
+//    logger.log("ENTER MwoMainwindow:OnTimer().");
+//    logger.log("LEAVE MwoMainwindow:OnTimer().");
+//}

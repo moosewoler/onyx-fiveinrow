@@ -8,9 +8,13 @@ MwoApplication::MwoApplication(int &argc, char **argv)
     : QApplication(argc, argv)
 {
     logger.log("ENTER MwoApplication:MwoApplication().");
+
+    setApplicationName("five in a row");
+    QTranslator translator;
+    translator.load(":/gomoku_" + QLocale::system().name());
+    installTranslator(&translator);
     ui::loadTranslator(QLocale::system().name());
-    QCoreApplication::setOrganizationName(QLatin1String("Onyx"));
-    QCoreApplication::setApplicationName(QLatin1String("Mwo Application"));
+
     logger.log("LEAVE MwoApplication:MwoApplication().");
 }
 
@@ -23,7 +27,6 @@ MwoApplication::~MwoApplication(void)
 bool MwoApplication::start()
 {
     logger.log("ENTER MwoApplication:start().");
-    main_window_.showMaximized();
     main_window_.start();
     logger.log("LEAVE MwoApplication:start().");
     return true;
